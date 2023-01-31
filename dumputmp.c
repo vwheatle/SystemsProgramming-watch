@@ -47,5 +47,5 @@ void show_utrec(struct utmp *rp) {
 	printf("%6d ", rp->ut_pid );
 	printf("%4d %-12.12s ", rp->ut_type , typename(rp->ut_type) );
 	printf("%12d ", rp->ut_time );
-	printf("%-96.96s\n", rp->ut_host ); // have to limit length
+	printf("%-32.32s\n", rp->ut_host ); // have to limit length
 }
