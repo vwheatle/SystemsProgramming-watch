@@ -20,10 +20,33 @@
 #include <unistd.h> // syscalls
 #include <fcntl.h> // file flags
 
+#include "utmplib.h"
+
 struct WatchedUser {
 	char *name; // stolen from argv, probably fine
-	bool present;
+	bool lastPresent, nowPresent;
 };
+
+void updateWatchedUsers(struct WatchedUser *users, size_t usersLen) {
+	if (utmp_open(NULL) == -1) {
+		perror("initial utmp");
+		exit(EXIT_FAILURE);
+	}
+	
+	for (size_t i = 0; i < usersLen; i++) {
+		users[i].lastPresent = users[i].nowPresent;
+		users[i].nowPresent = false;
+	}
+	
+	struct utmp *record;
+	while ((record = utmp_next()) != NULLUT)
+		for (size_t i = 0; i < usersLen; i++)
+			if (strncmp(record->ut_user, users[i].name, UT_NAMESIZE) == 0)
+				users[i].nowPresent = true;
+	
+	// clean up after yourself
+	utmp_close();
+}
 
 int main(int argc, char *argv[]) {
 	unsigned int pollTime = 300; // in seconds
@@ -39,36 +62,84 @@ int main(int argc, char *argv[]) {
 		exit(EXIT_FAILURE);
 	}
 	
-	size_t namesStart = 2; // if argv[1] is pollTime (2) or not (1)
+	// DETERMINE IF POLL TIME WAS SPECIFIED
+	
+	size_t usersStart = 2; // if argv[1] is pollTime (2) or not (1)
 	
 	char *firstBad = NULL;
 	unsigned long pollTimeL = strtoul(argv[1], &firstBad, 0);
 	if (*firstBad != '\0') {
 		fprintf(stderr, "bleep bleep well it's not a poll time\n");
-		namesStart = 1; // this is not a poll time
+		usersStart = 1; // this is not a poll time
 	} else {
 		fprintf(stderr, "bleep bleep got a poll time %ld\n", pollTimeL);
 		pollTime = (unsigned int)pollTimeL; // atoi is a crime against humanity
 	}
 	
-	if (namesStart >= (size_t)argc) {
+	// INITIALIZE LIST OF USERS
+	
+	if (usersStart >= (size_t)argc) {
 		fprintf(stderr, "jeez, at least give me a single logname..\n");
 		exit(EXIT_FAILURE);
 	}
 	
-	size_t usersLen = argc - namesStart;
+	size_t usersLen = argc - usersStart;
 	struct WatchedUser *users = malloc(sizeof(struct WatchedUser) * usersLen);
 	
+	fprintf(stderr, "bleep bleep specified %ld users..\n", usersLen);
+	
 	for (size_t i = 0; i < usersLen; i++) {
-		users[i].name = argv[i + namesStart];
-		users[i].present = false;
+		users[i].name = argv[i + usersStart];
+		users[i].lastPresent = users[i].nowPresent = false;
 	}
 	
-	// TODO: initial "well this user is already here" note
+	// FIRST LOOK AT UTMP FILE
 	
-	// TODO: delay - read - check loop..
+	updateWatchedUsers(users, usersLen);
+	
+	bool nonzeroUsers = false;
+	for (size_t i = 0; i < usersLen; i++) {
+		if (users[i].nowPresent) {
+			printf("%s ", users[i].name);
+			nonzeroUsers = true;
+		}
+	}
+	
+	if (nonzeroUsers)
+		printf("are currently logged in\n");
+	else
+		printf("none of the specified users are currently logged in\n");
+	
+	// LOOP OF UPDATEING
+	
+	while (sleep(pollTime) == 0) {
+		printf("checking\n");
+		updateWatchedUsers(users, usersLen);
+		
+		// all users that just logged out
+		nonzeroUsers = false;
+		for (size_t i = 0; i < usersLen; i++) {
+			if (users[i].lastPresent && !users[i].nowPresent) {
+				printf("%s ", users[i].name);
+				nonzeroUsers = true;
+			}
+		}
+		if (nonzeroUsers) printf(" logged out\n");
+		
+		// all users that just logged in
+		nonzeroUsers = false;
+		for (size_t i = 0; i < usersLen; i++) {
+			if (!users[i].lastPresent && users[i].nowPresent) {
+				printf("%s ", users[i].name);
+				nonzeroUsers = true;
+			}
+		}
+		if (nonzeroUsers) printf(" logged in\n");
+	}
 	
 	free(users);
 	
 	return EXIT_SUCCESS;
 }
+
+
