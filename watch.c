@@ -53,6 +53,8 @@ void updateWatchedUsers(struct WatchedUser *users, size_t usersLen) {
 int main(int argc, char *argv[]) {
 	unsigned int pollTime = 300; // in seconds
 	
+	// SHOW USAGE
+	
 	if (argc <= 1) {
 		char *name = (argc > 0) ? argv[0] : "watch";
 		fprintf(stderr,
@@ -78,6 +80,8 @@ int main(int argc, char *argv[]) {
 		pollTime = (unsigned int)pollTimeL; // atoi is a crime against humanity
 	}
 	
+	// DETERMINE IF ANY LOGNAMES WERE GIVEN
+	
 	if (usersStart >= (size_t)argc) {
 		fprintf(stderr, "jeez, at least give me a single logname..\n");
 		exit(EXIT_FAILURE);
@@ -102,11 +106,11 @@ int main(int argc, char *argv[]) {
 	// the list of watched users should also include yourself, because
 	// the program needs to know when you log off so it can terminate.
 	
-	size_t usersLen = argc - usersStart;
-	size_t allUsersLen = usersLen + 1;
+	size_t argUsersLen = argc - usersStart;
+	size_t allUsersLen = argUsersLen + 1;
 	struct WatchedUser *users = malloc(sizeof(struct WatchedUser) * allUsersLen);
 	
-	fprintf(stderr, "bleep bleep specified %ld users..\n", usersLen);
+	fprintf(stderr, "bleep bleep specified %ld users..\n", argUsersLen);
 	
 	for (size_t i = 0; i < allUsersLen; i++) {
 		if (i != allUsersLen - 1)
@@ -123,8 +127,9 @@ int main(int argc, char *argv[]) {
 	
 	updateWatchedUsers(users, allUsersLen);
 	
+	// only compare status of the names given as arguments.
 	bool nonzeroUsers = false;
-	for (size_t i = 0; i < usersLen; i++) {
+	for (size_t i = 0; i < argUsersLen; i++) {
 		if (users[i].nowPresent) {
 			printf("%s ", users[i].name);
 			nonzeroUsers = true;
@@ -146,7 +151,7 @@ int main(int argc, char *argv[]) {
 		
 		// all users that just logged out
 		nonzeroUsers = false;
-		for (size_t i = 0; i < usersLen; i++) {
+		for (size_t i = 0; i < argUsersLen; i++) {
 			if (users[i].lastPresent && !users[i].nowPresent) {
 				printf("%s ", users[i].name);
 				nonzeroUsers = true;
@@ -156,7 +161,7 @@ int main(int argc, char *argv[]) {
 		
 		// all users that just logged in
 		nonzeroUsers = false;
-		for (size_t i = 0; i < usersLen; i++) {
+		for (size_t i = 0; i < argUsersLen; i++) {
 			if (!users[i].lastPresent && users[i].nowPresent) {
 				printf("%s ", users[i].name);
 				nonzeroUsers = true;
