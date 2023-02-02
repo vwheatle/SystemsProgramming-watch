@@ -19,6 +19,7 @@
 // Linux stuff
 #include <unistd.h> // syscalls
 #include <fcntl.h> // file flags
+#include <pwd.h> // getpwuid
 
 #include "utmplib.h"
 
@@ -27,6 +28,7 @@ struct WatchedUser {
 	bool lastPresent, nowPresent;
 };
 
+// Open, read, and close the utmp file to update the array of WatchedUsers.
 void updateWatchedUsers(struct WatchedUser *users, size_t usersLen) {
 	if (utmp_open(NULL) == -1) {
 		perror("initial utmp");
@@ -76,26 +78,50 @@ int main(int argc, char *argv[]) {
 		pollTime = (unsigned int)pollTimeL; // atoi is a crime against humanity
 	}
 	
-	// INITIALIZE LIST OF USERS
-	
 	if (usersStart >= (size_t)argc) {
 		fprintf(stderr, "jeez, at least give me a single logname..\n");
 		exit(EXIT_FAILURE);
 	}
 	
+	// GET YOUR USER NAME
+	
+	uid_t you = geteuid(); // geteuid
+	struct passwd *yourPasswd;
+	if ((yourPasswd = getpwuid(you)) == NULL) {
+		perror("you're not anything??");
+		exit(EXIT_FAILURE);
+	}
+	char *yourName = yourPasswd->pw_name;
+	
+	// note: getpwuid doesn't allocate anything, it just keeps a static area
+	//  that it keeps forever. calling this again would clobber the yourPasswd
+	//  struct and the yourName string. thankfully, we don't do that.
+	
+	// INITIALIZE LIST OF USERS
+	
+	// the list of watched users should also include yourself, because
+	// the program needs to know when you log off so it can terminate.
+	
 	size_t usersLen = argc - usersStart;
-	struct WatchedUser *users = malloc(sizeof(struct WatchedUser) * usersLen);
+	size_t allUsersLen = usersLen + 1;
+	struct WatchedUser *users = malloc(sizeof(struct WatchedUser) * allUsersLen);
 	
 	fprintf(stderr, "bleep bleep specified %ld users..\n", usersLen);
 	
-	for (size_t i = 0; i < usersLen; i++) {
-		users[i].name = argv[i + usersStart];
+	for (size_t i = 0; i < allUsersLen; i++) {
+		if (i != allUsersLen - 1)
+			users[i].name = argv[i + usersStart];
+		
 		users[i].lastPresent = users[i].nowPresent = false;
 	}
 	
+	// also keep a handle directly to yourself, for convenience
+	struct WatchedUser *yourUser = &users[allUsersLen - 1];
+	yourUser->name = yourName;
+	
 	// FIRST LOOK AT UTMP FILE
 	
-	updateWatchedUsers(users, usersLen);
+	updateWatchedUsers(users, allUsersLen);
 	
 	bool nonzeroUsers = false;
 	for (size_t i = 0; i < usersLen; i++) {
@@ -112,9 +138,11 @@ int main(int argc, char *argv[]) {
 	
 	// LOOP OF UPDATEING
 	
-	while (sleep(pollTime) == 0) {
+	// while the program doesn't get interrupted from sleep...
+	// and while you're actually logged on...
+	while (sleep(pollTime) == 0 && yourUser->nowPresent) {
 		printf("checking\n");
-		updateWatchedUsers(users, usersLen);
+		updateWatchedUsers(users, allUsersLen);
 		
 		// all users that just logged out
 		nonzeroUsers = false;
@@ -124,7 +152,7 @@ int main(int argc, char *argv[]) {
 				nonzeroUsers = true;
 			}
 		}
-		if (nonzeroUsers) printf(" logged out\n");
+		if (nonzeroUsers) puts("logged out\n");
 		
 		// all users that just logged in
 		nonzeroUsers = false;
@@ -134,12 +162,10 @@ int main(int argc, char *argv[]) {
 				nonzeroUsers = true;
 			}
 		}
-		if (nonzeroUsers) printf(" logged in\n");
+		if (nonzeroUsers) puts("logged in\n");
 	}
 	
 	free(users);
 	
 	return EXIT_SUCCESS;
 }
-
-
