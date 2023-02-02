@@ -146,7 +146,7 @@ int main(int argc, char *argv[]) {
 	// while the program doesn't get interrupted from sleep...
 	// and while you're actually logged on...
 	while (sleep(pollTime) == 0 && yourUser->nowPresent) {
-		printf("checking\n");
+		puts("checking");
 		updateWatchedUsers(users, allUsersLen);
 		
 		// all users that just logged out
@@ -157,7 +157,7 @@ int main(int argc, char *argv[]) {
 				nonzeroUsers = true;
 			}
 		}
-		if (nonzeroUsers) puts("logged out\n");
+		if (nonzeroUsers) puts("logged out");
 		
 		// all users that just logged in
 		nonzeroUsers = false;
@@ -167,8 +167,10 @@ int main(int argc, char *argv[]) {
 				nonzeroUsers = true;
 			}
 		}
-		if (nonzeroUsers) puts("logged in\n");
+		if (nonzeroUsers) puts("logged in");
 	}
+	
+	puts("ah.. good bye.");
 	
 	free(users);
 	
