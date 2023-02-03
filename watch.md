@@ -31,6 +31,8 @@ run:
 	valgrind $(VALGRIND_FLAGS) ./mywatch 5 `whoami` reboot
 ```
 
+Running it on `wasp`, I noticed that it can't compile with the UB sanitizer enabled (the `-fsanitize=undefined` flag). If it doesn't work on your machine, it can absolutely be removed from the list of flags in the Makefile without losing anything.
+
 ## `utmplib.h`
 
 This has been reconfigured and renamed from the included version. I removed the `UTNULL` definition because the built-in `NULL` definition works just fine and is valid C. I also changed the type of the buffer and just casted it to a `void*` when I needed to `read`.
