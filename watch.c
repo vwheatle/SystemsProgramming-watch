@@ -5,33 +5,29 @@
 
 // C stuff
 #include <stdlib.h> // -> EXIT_*
-#include <stdio.h> // buffered I/O
+#include <stdio.h> // -> printf, fprintf, puts
 
-#include <string.h> // -> str*, mem*
-#include <ctype.h> // -> is*
+#include <string.h> // -> strncmp
 #include <stdbool.h> // -> bool
-
-#include <limits.h> // -> ULONG_MAX
-#include <time.h>
-
-#include <errno.h>
+#include <limits.h> // -> UINT_MAX
+#include <errno.h> // -> perror
 
 // Linux stuff
 #include <unistd.h> // syscalls
-#include <fcntl.h> // file flags
-#include <pwd.h> // getpwuid
+#include <pwd.h> // -> getpwuid
 
-#include "utmplib.h"
+#include "utmplib.h" // -> utmp_*
 
+// struct to gather a bunch of information about a user into one place.
 struct WatchedUser {
-	char *name; // stolen from argv, probably fine
+	char *name; // pointer into argv, probably fine to do
 	bool lastPresent, nowPresent;
 };
 
 // Open, read, and close the utmp file to update the array of WatchedUsers.
 void updateWatchedUsers(struct WatchedUser *users, size_t usersLen) {
 	if (utmp_open(NULL) == -1) {
-		perror("initial utmp");
+		perror("tried to open utmp file");
 		exit(EXIT_FAILURE);
 	}
 	
@@ -41,7 +37,7 @@ void updateWatchedUsers(struct WatchedUser *users, size_t usersLen) {
 	}
 	
 	struct utmp *record;
-	while ((record = utmp_next()) != NULLUT)
+	while ((record = utmp_next()) != NULL)
 		for (size_t i = 0; i < usersLen; i++)
 			if (strncmp(record->ut_user, users[i].name, UT_NAMESIZE) == 0)
 				users[i].nowPresent = true;
@@ -71,19 +67,22 @@ int main(int argc, char *argv[]) {
 	size_t usersStart = 2; // if argv[1] is pollTime (2) or not (1)
 	
 	char *firstBad = NULL;
-	unsigned long pollTimeL = strtoul(argv[1], &firstBad, 0);
+	unsigned long pollTimeL = strtoul(argv[1], &firstBad, 10);
 	if (*firstBad != '\0') {
-		fprintf(stderr, "bleep bleep well it's not a poll time\n");
-		usersStart = 1; // this is not a poll time
+		usersStart = 1; // 1st argument isn't a poll time, probably a logname
 	} else {
-		fprintf(stderr, "bleep bleep got a poll time %ld\n", pollTimeL);
-		pollTime = (unsigned int)pollTimeL; // atoi is a crime against humanity
+		// doing this silly thing because i greatly dislike atoi
+		if (pollTimeL > (unsigned long)UINT_MAX) {
+			pollTime = UINT_MAX;
+		} else {
+			pollTime = (unsigned int)pollTimeL;
+		}
 	}
 	
 	// DETERMINE IF ANY LOGNAMES WERE GIVEN
 	
 	if (usersStart >= (size_t)argc) {
-		fprintf(stderr, "jeez, at least give me a single logname..\n");
+		fprintf(stderr, "please specify one or more lognames.\n");
 		exit(EXIT_FAILURE);
 	}
 	
@@ -92,7 +91,7 @@ int main(int argc, char *argv[]) {
 	uid_t you = geteuid(); // geteuid
 	struct passwd *yourPasswd;
 	if ((yourPasswd = getpwuid(you)) == NULL) {
-		perror("you're not anything??");
+		perror("tried to get username from passwd file");
 		exit(EXIT_FAILURE);
 	}
 	char *yourName = yourPasswd->pw_name;
@@ -146,7 +145,6 @@ int main(int argc, char *argv[]) {
 	// while the program doesn't get interrupted from sleep...
 	// and while you're actually logged on...
 	while (sleep(pollTime) == 0 && yourUser->nowPresent) {
-		puts("checking");
 		updateWatchedUsers(users, allUsersLen);
 		
 		// all users that just logged out
@@ -170,7 +168,7 @@ int main(int argc, char *argv[]) {
 		if (nonzeroUsers) puts("logged in");
 	}
 	
-	puts("ah.. good bye.");
+	puts("you're no longer online! quitting.");
 	
 	free(users);
 	
